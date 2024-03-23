@@ -1,0 +1,23 @@
+{
+  "name": "ndbi016-transactions",
+  "version": "1.0.0",
+  "description": "Demo implementation of a transaction manager",
+  "main": "src/index.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "ts-node --project tsconfig.json src/index.ts"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/filipjezek/ndbi016-transactions.git"
+  },
+  "author": "filip.jezek@gmail.com",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/filipjezek/ndbi016-transactions/issues"
+  },
+  "homepage": "https://github.com/filipjezek/ndbi016-transactions#readme",
+  "devDependencies": {
+    "ts-node": "^10.9.2"
+  }
+}
