@@ -17,9 +17,9 @@ export type Message = (
 ) & { transactionId: number };
 
 export enum MessageType {
-  Start,
-  Read,
-  Write,
-  Abort,
-  Commit,
+  Start = "S",
+  Read = "R",
+  Write = "W",
+  Abort = "A",
+  Commit = "C",
 }

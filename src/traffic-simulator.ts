@@ -1,11 +1,30 @@
 import { Message, MessageType } from "./message";
+import { shuffle } from "./utils/shuffle";
 
 /**
- * TrafficManager class collects messages from multiple sources and outputs one continous stream of messages
+ * collects messages from multiple sources and outputs one continous stream of messages
  */
-export class TrafficManager {
+export class TrafficSimulator {
+  private concurrentMessages: Message[] = [];
+  private connections: Connection[] = [];
+
+  public hasTraffic() {
+    return this.connections.some((c) => c.active);
+  }
+
   public connect() {
-    return new Connection(() => {});
+    const conn = new Connection((m) => {
+      this.concurrentMessages.push(m);
+    });
+    this.connections.push(conn);
+    return conn;
+  }
+
+  public getBatch() {
+    const batch = this.concurrentMessages;
+    this.concurrentMessages = [];
+    shuffle(batch);
+    return batch;
   }
 }
 
@@ -13,6 +32,10 @@ export class Connection {
   private static transactionCount = 0;
   private tranId = 0;
   private tranRunning = false;
+  private _active = true;
+  public get active() {
+    return this._active;
+  }
 
   constructor(private sendCb: (m: Message) => void) {}
 
@@ -72,5 +95,10 @@ export class Connection {
         callback: res,
       });
     });
+  }
+
+  public async disconnect() {
+    if (this.tranRunning) await this.abort();
+    this._active = false;
   }
 }

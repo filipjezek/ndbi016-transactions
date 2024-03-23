@@ -1,7 +1,9 @@
 import { Connection } from "../traffic-simulator";
 import { randint } from "../utils/randint";
+import { rng } from "../utils/rng";
+import { AppStub } from "./app-stub";
 
-export class RandomApp {
+export class RandomApp implements AppStub {
   constructor(
     private conn: Connection,
     private options: {
@@ -15,14 +17,14 @@ export class RandomApp {
   public async runOnce() {
     await this.conn.startTransaction();
 
-    while (Math.random() > 0.2) {
+    while (rng() > 0.2) {
       await this.moveRandomAmount();
     }
 
-    if (Math.random() > 0.5) {
+    if (rng() > 0.5) {
       await this.conn.commit();
     } else {
-      if (Math.random() > 0.5) {
+      if (rng() > 0.5) {
         await this.inconsistentAbort();
       } else {
         await this.conn.abort();
@@ -37,7 +39,7 @@ export class RandomApp {
   }
 
   private async inconsistentAbort() {
-    while (Math.random() > 0.25) {
+    while (rng() > 0.25) {
       await this.conn.write(
         randint(
           this.options.addressFrom,
@@ -64,5 +66,9 @@ export class RandomApp {
     const toValue = await this.conn.read(to);
     await this.conn.write(from, fromValue - amount);
     await this.conn.write(to, toValue + amount);
+  }
+
+  public async exit() {
+    await this.conn.disconnect();
   }
 }

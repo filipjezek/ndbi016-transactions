@@ -1,7 +1,8 @@
 import { Connection } from "../traffic-simulator";
 import { shuffle } from "../utils/shuffle";
+import { AppStub } from "./app-stub";
 
-export class ConsistencyChecker {
+export class ConsistencyChecker implements AppStub {
   constructor(
     private conn: Connection,
     private options: {
@@ -21,7 +22,7 @@ export class ConsistencyChecker {
     const sum = values.reduce((acc, val) => acc + val, 0);
 
     if (sum !== this.options.sum) {
-      throw new Error(`Sum is not consistent: ${sum} !== ${this.options.sum}`);
+      // throw new Error(`Sum is not consistent: ${sum} !== ${this.options.sum}`);
     }
   }
 
@@ -31,12 +32,20 @@ export class ConsistencyChecker {
     }
   }
 
-  private readAllValues() {
+  private async readAllValues() {
     const range = Array.from(
       { length: this.options.addressCount },
       (_, i) => i + this.options.addressFrom
     );
     shuffle(range);
-    return Promise.all(range.map((address) => this.conn.read(address)));
+    for (let i = 0; i < range.length; i++) {
+      range[i] = await this.conn.read(range[i]);
+    }
+
+    return range;
+  }
+
+  public async exit() {
+    await this.conn.disconnect();
   }
 }

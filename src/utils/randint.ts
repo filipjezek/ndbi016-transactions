@@ -1,3 +1,5 @@
+import { rng } from "./rng";
+
 export function randint(max: number): number;
 export function randint(min: number, max: number): number;
 export function randint(min: number, max?: number): number {
@@ -5,5 +7,5 @@ export function randint(min: number, max?: number): number {
     max = min;
     min = 0;
   }
-  return Math.floor(Math.random() * (max - min) + min);
+  return Math.floor(rng() * (max - min) + min);
 }
