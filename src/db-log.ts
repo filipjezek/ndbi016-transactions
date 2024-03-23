@@ -3,6 +3,9 @@ import chalk from "chalk";
 
 export class DBLog {
   private log: Message[] = [];
+  public get data() {
+    return this.log as readonly Message[];
+  }
   private palette = [
     "#8dd3c7",
     "#ffffb3",
@@ -23,13 +26,14 @@ export class DBLog {
   }
 
   public print() {
-    console.log("DB Log:");
+    process.stdout.write("DB Log:");
     this.log.forEach((msg, i) => {
       if (i % 8 === 0) {
         process.stdout.write("\n");
       }
       this.printMessage(msg);
     });
+    console.log();
   }
 
   private printMessage(msg: Message) {

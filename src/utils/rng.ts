@@ -1,3 +1,11 @@
 import seedrandom from "seedrandom";
 
-export const rng = seedrandom("NDBI016");
+export function rng() {
+  return _rng();
+}
+export function resetRNG() {
+  _rng = seedrandom("foobar");
+}
+
+let _rng: () => number;
+resetRNG();

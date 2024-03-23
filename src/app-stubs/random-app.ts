@@ -3,7 +3,18 @@ import { randint } from "../utils/randint";
 import { rng } from "../utils/rng";
 import { AppStub } from "./app-stub";
 
+export interface MovedAmount {
+  from: number;
+  to: number;
+  amount: number;
+}
+
 export class RandomApp implements AppStub {
+  private _amountsMoved: MovedAmount[] = [];
+  public get amountsMoved() {
+    return this._amountsMoved as readonly MovedAmount[];
+  }
+
   constructor(
     private conn: Connection,
     private options: {
@@ -60,12 +71,13 @@ export class RandomApp implements AppStub {
       this.options.addressFrom,
       this.options.addressFrom + this.options.addressCount
     );
-    const amount = randint(0, 1000);
+    const amount = randint(1000);
 
     const fromValue = await this.conn.read(from);
     const toValue = await this.conn.read(to);
     await this.conn.write(from, fromValue - amount);
     await this.conn.write(to, toValue + amount);
+    this._amountsMoved.push({ from, to, amount });
   }
 
   public async exit() {

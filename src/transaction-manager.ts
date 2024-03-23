@@ -1,10 +1,19 @@
 import { DBLog } from "./db-log";
-import { Message, MessageType } from "./message";
+import {
+  ControlMessage,
+  Message,
+  MessageType,
+  ReadMessage,
+  WriteMessage,
+} from "./message";
 import { TrafficSimulator } from "./traffic-simulator";
 import { promiseTimeout } from "./utils/promise-timeout";
 
 export class TransactionManager {
-  private readonly data: number[];
+  private readonly _data: number[];
+  public get data() {
+    return this._data as readonly number[];
+  }
   public log = new DBLog();
 
   constructor(
@@ -14,25 +23,19 @@ export class TransactionManager {
       size: number;
     }
   ) {
-    this.data = new Array(this.options.size).fill(0);
-    this.data[0] = this.options.sum;
+    this._data = new Array(this.options.size).fill(0);
+    this._data[0] = this.options.sum;
   }
 
   public async run() {
     while (this.traffic.hasTraffic()) {
-      const batch = this.traffic.getBatch();
-      this.consumeBatch(batch);
+      this.handleMessage(this.traffic.getMessage());
       await promiseTimeout(); // wait cycle
     }
   }
 
-  public consumeBatch(batch: Message[]) {
-    for (const msg of batch) {
-      this.handleMessage(msg);
-    }
-  }
-
-  public handleMessage(msg: Message) {
+  private handleMessage(msg: Message) {
+    if (!msg) return;
     this.log.append(msg);
     switch (msg.type) {
       case MessageType.Start:
@@ -53,25 +56,20 @@ export class TransactionManager {
     }
   }
 
-  private handleStart(msg: Message) {
-    if (msg.type !== MessageType.Start) return;
+  private handleStart(msg: ControlMessage) {
     msg.callback();
   }
-  private handleRead(msg: Message) {
-    if (msg.type !== MessageType.Read) return;
-    msg.callback(this.data[msg.address]);
+  private handleRead(msg: ReadMessage) {
+    msg.callback(this._data[msg.address]);
   }
-  private handleWrite(msg: Message) {
-    if (msg.type !== MessageType.Write) return;
-    this.data[msg.address] = msg.data;
+  private handleWrite(msg: WriteMessage) {
+    this._data[msg.address] = msg.data;
     msg.callback();
   }
-  private handleCommit(msg: Message) {
-    if (msg.type !== MessageType.Commit) return;
+  private handleCommit(msg: ControlMessage) {
     msg.callback();
   }
-  private handleAbort(msg: Message) {
-    if (msg.type !== MessageType.Abort) return;
+  private handleAbort(msg: ControlMessage) {
     msg.callback();
   }
 }

@@ -1,11 +1,11 @@
 import { Message, MessageType } from "./message";
-import { shuffle } from "./utils/shuffle";
+import { randint } from "./utils/randint";
 
 /**
  * collects messages from multiple sources and outputs one continous stream of messages
  */
 export class TrafficSimulator {
-  private concurrentMessages: Message[] = [];
+  private msgBuffer: Message[] = [];
   private connections: Connection[] = [];
 
   public hasTraffic() {
@@ -14,17 +14,16 @@ export class TrafficSimulator {
 
   public connect() {
     const conn = new Connection((m) => {
-      this.concurrentMessages.push(m);
+      this.msgBuffer.push(m);
     });
     this.connections.push(conn);
     return conn;
   }
 
-  public getBatch() {
-    const batch = this.concurrentMessages;
-    this.concurrentMessages = [];
-    shuffle(batch);
-    return batch;
+  public getMessage() {
+    if (this.msgBuffer.length === 0) return null;
+    const i = randint(this.msgBuffer.length);
+    return this.msgBuffer.splice(i, 1)[0];
   }
 }
 
