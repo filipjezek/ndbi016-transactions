@@ -1,5 +1,6 @@
 import { Message, MessageType } from "./message";
 import chalk from "chalk";
+import { SerializationGraph } from "./serialization-graph";
 
 export class DBLog {
   private log: Message[] = [];
@@ -20,12 +21,14 @@ export class DBLog {
     "#ccebc5",
     "#ffed6f",
   ];
+  public graph: SerializationGraph;
 
   public append(msg: Message) {
     this.log.push(msg);
   }
 
   public print() {
+    if (!this.graph) this.recalculateProperties();
     process.stdout.write("DB Log:");
     this.log.forEach((msg, i) => {
       if (i % 8 === 0) {
@@ -33,7 +36,19 @@ export class DBLog {
       }
       this.printMessage(msg);
     });
-    console.log();
+    console.log("\nProperties:");
+    console.log(
+      "Serializable:",
+      this.graph.serializable ? chalk.green("true") : chalk.red("false")
+    );
+    console.log(
+      "Recoverable:",
+      this.graph.recoverable ? chalk.green("true") : chalk.red("false")
+    );
+    console.log(
+      "Strict recoverable:",
+      this.graph.strictRecoverable ? chalk.green("true") : chalk.red("false")
+    );
   }
 
   private printMessage(msg: Message) {
@@ -47,5 +62,9 @@ export class DBLog {
     str = str.padEnd(10);
 
     process.stdout.write(chalk.hex(color)(str) + " ");
+  }
+
+  public recalculateProperties() {
+    this.graph = new SerializationGraph(this.log);
   }
 }
