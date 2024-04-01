@@ -1,6 +1,5 @@
 import { Connection } from "../traffic-simulator";
-import { randint } from "../utils/randint";
-import { rng } from "../utils/rng";
+import { SeededRNG, globalRNG } from "../utils/rng";
 import { AppStub } from "./app-stub";
 
 export interface MovedAmount {
@@ -10,32 +9,31 @@ export interface MovedAmount {
 }
 
 export class RandomApp implements AppStub {
-  private _amountsMoved: MovedAmount[] = [];
-  public get amountsMoved() {
-    return this._amountsMoved as readonly MovedAmount[];
-  }
+  private rng: SeededRNG;
 
   constructor(
     private conn: Connection,
     private options: {
       addressFrom?: number;
       addressCount: number;
+      seed?: string;
     }
   ) {
     this.options = { addressFrom: 0, ...options };
+    this.rng = "seed" in this.options ? new SeededRNG(options.seed) : globalRNG;
   }
 
   public async runOnce() {
     await this.conn.startTransaction();
 
-    while (rng() > 0.2) {
+    while (this.rng.random() > 0.2) {
       await this.moveRandomAmount();
     }
 
-    if (rng() > 0.5) {
+    if (this.rng.random() > 0.5) {
       await this.conn.commit();
     } else {
-      if (rng() > 0.5) {
+      if (this.rng.random() > 0.5) {
         await this.inconsistentAbort();
       } else {
         await this.conn.abort();
@@ -49,35 +47,41 @@ export class RandomApp implements AppStub {
     }
   }
 
+  public reset(conn: Connection) {
+    this.conn = conn;
+    if ("seed" in this.options) {
+      this.rng.reset();
+    }
+  }
+
   private async inconsistentAbort() {
-    while (rng() > 0.25) {
+    while (this.rng.random() > 0.25) {
       await this.conn.write(
-        randint(
+        this.rng.randint(
           this.options.addressFrom,
           this.options.addressFrom + this.options.addressCount
         ),
-        randint(0, 1000)
+        this.rng.randint(0, 1000)
       );
     }
     await this.conn.abort();
   }
 
   private async moveRandomAmount() {
-    const from = randint(
+    const from = this.rng.randint(
       this.options.addressFrom,
       this.options.addressFrom + this.options.addressCount
     );
-    const to = randint(
+    const to = this.rng.randint(
       this.options.addressFrom,
       this.options.addressFrom + this.options.addressCount
     );
-    const amount = randint(1000);
+    const amount = this.rng.randint(1000);
 
     const fromValue = await this.conn.read(from);
     const toValue = await this.conn.read(to);
     await this.conn.write(from, fromValue - amount);
     await this.conn.write(to, toValue + amount);
-    this._amountsMoved.push({ from, to, amount });
   }
 
   public async exit() {

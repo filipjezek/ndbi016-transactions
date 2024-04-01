@@ -1,5 +1,5 @@
 import { Message, MessageType } from "./message";
-import { randint } from "./utils/randint";
+import { globalRNG } from "./utils/rng";
 
 /**
  * collects messages from multiple sources and outputs one continous stream of messages
@@ -22,7 +22,7 @@ export class TrafficSimulator {
 
   public getMessage() {
     if (this.msgBuffer.length === 0) return null;
-    const i = randint(this.msgBuffer.length);
+    const i = globalRNG.randint(this.msgBuffer.length);
     return this.msgBuffer.splice(i, 1)[0];
   }
 }

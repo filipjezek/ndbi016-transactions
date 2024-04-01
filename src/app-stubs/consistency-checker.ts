@@ -1,5 +1,5 @@
 import { Connection } from "../traffic-simulator";
-import { shuffle } from "../utils/shuffle";
+import { globalRNG } from "../utils/rng";
 import { AppStub } from "./app-stub";
 
 export class ConsistencyChecker implements AppStub {
@@ -37,7 +37,7 @@ export class ConsistencyChecker implements AppStub {
       { length: this.options.addressCount },
       (_, i) => i + this.options.addressFrom
     );
-    shuffle(range);
+    globalRNG.shuffle(range);
     for (let i = 0; i < range.length; i++) {
       range[i] = await this.conn.read(range[i]);
     }
