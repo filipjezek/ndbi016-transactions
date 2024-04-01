@@ -1,11 +1,12 @@
 import { Message, MessageType } from "./message";
 
 export class SerializationGraph {
-  private data: Set<number>[] = [];
+  private conflicts: Set<number>[] = [];
   private properties = {
     serializable: false,
     recoverable: false,
-    strictRecoverable: false,
+    cascadeless: false,
+    strict: false,
   };
   public get serializable() {
     return this.properties.serializable;
@@ -13,14 +14,17 @@ export class SerializationGraph {
   public get recoverable() {
     return this.properties.recoverable;
   }
-  public get strictRecoverable() {
-    return this.properties.strictRecoverable;
+  public get strict() {
+    return this.properties.strict;
+  }
+  public get cascadeless() {
+    return this.properties.cascadeless;
   }
 
   constructor(private log: Message[]) {
     this.buildGraph();
     this.properties.serializable = this.isAcylic();
-    this.computeRecoverability();
+    this.computeRecoveryProps();
   }
 
   private buildGraph() {
@@ -34,6 +38,7 @@ export class SerializationGraph {
     }
 
     for (const g of groups) {
+      if (!g) continue;
       for (let src = 0; src < g.length; src++) {
         for (let tgt = src + 1; tgt < g.length; tgt++) {
           if (
@@ -43,9 +48,9 @@ export class SerializationGraph {
           )
             continue;
 
-          if (this.data[g[src].transactionId] === undefined)
-            this.data[g[src].transactionId] = new Set();
-          this.data[g[src].transactionId].add(g[tgt].transactionId);
+          if (this.conflicts[g[src].transactionId] === undefined)
+            this.conflicts[g[src].transactionId] = new Set();
+          this.conflicts[g[src].transactionId].add(g[tgt].transactionId);
         }
       }
     }
@@ -54,15 +59,15 @@ export class SerializationGraph {
   private isAcylic() {
     const visited: boolean[] = [];
     const stack: number[] = [];
-    for (let i = 0; i < this.data.length; i++) {
-      if (!this.data[i] || visited[i]) continue;
+    for (let i = 0; i < this.conflicts.length; i++) {
+      if (!this.conflicts[i] || visited[i]) continue;
       stack.push(i);
       while (stack.length) {
         const node = stack.pop();
         if (visited[node]) return false;
         visited[node] = true;
-        if (this.data[node]) {
-          for (const neighbor of this.data[node]) {
+        if (this.conflicts[node]) {
+          for (const neighbor of this.conflicts[node]) {
             stack.push(neighbor);
           }
         }
@@ -71,50 +76,59 @@ export class SerializationGraph {
     return true;
   }
 
-  private computeRecoverability() {
+  private computeRecoveryProps() {
     this.properties.recoverable = true;
-    this.properties.strictRecoverable = true;
-    // indexed by address
-    const uncommittedWrites: Set<number>[] = [];
-
-    // indexed by transaction id
-    const readAddresses = this.data.map(() => new Set<number>());
+    this.properties.cascadeless = true;
+    this.properties.strict = true;
+    /**
+     * tids indexed by addresses
+     */
+    const uncommittedWrites: number[] = [];
+    /**
+     * addresses indexed by tids
+     */
+    const readAddresses: Set<number>[] = [];
 
     for (const m of this.log) {
       if (m.type === MessageType.Read || m.type === MessageType.Write) {
-        if (m.type === MessageType.Write) {
-          if (uncommittedWrites[m.address] === undefined) {
-            uncommittedWrites[m.address] = new Set();
-          }
-          uncommittedWrites[m.address].add(m.transactionId);
-        } else {
-          readAddresses[m.transactionId].add(m.address);
-        }
-
         if (
-          uncommittedWrites[m.address] &&
-          (uncommittedWrites[m.address].size > 1 ||
-            !uncommittedWrites[m.address].has(m.transactionId))
+          uncommittedWrites[m.address] !== undefined &&
+          uncommittedWrites[m.address] !== m.transactionId
         ) {
           // some other transaction has written to this address
           // and has not ended yet
-          this.properties.strictRecoverable = false;
+          this.properties.strict = false;
+          if (m.type === MessageType.Read) {
+            // dirty read
+            this.properties.cascadeless = false;
+          }
+        }
+
+        if (m.type === MessageType.Write) {
+          uncommittedWrites[m.address] = m.transactionId;
+        } else {
+          if (readAddresses[m.transactionId] === undefined) {
+            readAddresses[m.transactionId] = new Set();
+          }
+          readAddresses[m.transactionId].add(m.address);
         }
       } else if (
         m.type === MessageType.Abort ||
         m.type === MessageType.Commit
       ) {
-        for (const addr of uncommittedWrites) {
-          addr?.delete(m.transactionId);
-        }
-
-        if (m.type === MessageType.Commit) {
+        uncommittedWrites.forEach((tid, addr) => {
+          if (tid === m.transactionId) {
+            uncommittedWrites[addr] = undefined;
+          }
+        });
+        if (readAddresses[m.transactionId] && m.type === MessageType.Commit) {
           for (const addr of readAddresses[m.transactionId]) {
-            if (uncommittedWrites[addr]?.size) {
-              // our commit depends on uncommitted changes
+            if (
+              uncommittedWrites[addr] !== undefined &&
+              uncommittedWrites[addr] !== m.transactionId
+            ) {
+              // transaction has read an uncommitted write
               this.properties.recoverable = false;
-              this.properties.strictRecoverable = false;
-              return;
             }
           }
         }

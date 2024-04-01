@@ -28,7 +28,6 @@ export class DBLog {
   }
 
   public print() {
-    if (!this.graph) this.recalculateProperties();
     process.stdout.write("DB Log:");
     this.log.forEach((msg, i) => {
       if (i % 8 === 0) {
@@ -36,9 +35,14 @@ export class DBLog {
       }
       this.printMessage(msg);
     });
-    console.log("\nProperties:");
+    console.log();
+  }
+
+  public printProperties() {
+    this.recalculateProperties();
+    console.log("Properties:");
     console.log(
-      "Serializable:",
+      "Conflict serializable:",
       this.graph.serializable ? chalk.green("true") : chalk.red("false")
     );
     console.log(
@@ -46,8 +50,12 @@ export class DBLog {
       this.graph.recoverable ? chalk.green("true") : chalk.red("false")
     );
     console.log(
-      "Strict recoverable:",
-      this.graph.strictRecoverable ? chalk.green("true") : chalk.red("false")
+      "Cascadeless:",
+      this.graph.cascadeless ? chalk.green("true") : chalk.red("false")
+    );
+    console.log(
+      "Strict:",
+      this.graph.strict ? chalk.green("true") : chalk.red("false")
     );
   }
 
@@ -66,5 +74,30 @@ export class DBLog {
 
   public recalculateProperties() {
     this.graph = new SerializationGraph(this.log);
+  }
+
+  public export(historyId: number, separator = ",") {
+    return this.log
+      .map((msg) => {
+        return [
+          msg.transactionId,
+          msg.type.toLowerCase(),
+          "address" in msg ? msg.address : "",
+          historyId,
+        ].join(separator);
+      })
+      .join("\n");
+  }
+
+  public import(data: string, separator = ",") {
+    this.log = data.split("\n").map((line) => {
+      const [transactionId, type, address, historyId] = line.split(separator);
+      return {
+        transactionId: +transactionId,
+        type: type.toUpperCase() as MessageType,
+        address: address === "" ? undefined : +address,
+      } as Message;
+    });
+    this.graph = null;
   }
 }

@@ -23,7 +23,6 @@ async function runConcurrently() {
 }
 
 async function replaySequentially(permutation: number[]) {
-  const log = tm.log.data;
   const seqTm = new TransactionManager(traffic, { sum: 15, size: 10 });
 
   const sequence = (async () => {
@@ -37,6 +36,7 @@ async function replaySequentially(permutation: number[]) {
   await seqTm.run();
   printArray(seqTm.data, tm.data);
   seqTm.log.print();
+  seqTm.log.printProperties();
 }
 
 let apps: AppStub[] = [];
@@ -44,6 +44,7 @@ const traffic = new TrafficSimulator();
 const tm = new TransactionManager(traffic, { sum: 15, size: 10 });
 await runConcurrently();
 tm.log.print();
+tm.log.printProperties();
 printArray(tm.data);
 await replaySequentially([0, 1]);
 await replaySequentially([1, 0]);
