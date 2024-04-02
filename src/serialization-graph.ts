@@ -29,8 +29,13 @@ export class SerializationGraph {
 
   private buildGraph() {
     const groups: Message[][] = [];
+    const aborted = new Set(
+      this.log
+        .filter((m) => m.type === MessageType.Abort)
+        .map((m) => m.transactionId)
+    );
     for (const m of this.log) {
-      if (!("address" in m)) continue;
+      if (!("address" in m) || aborted.has(m.transactionId)) continue;
       if (groups[m.address] === undefined) {
         groups[m.address] = [];
       }
