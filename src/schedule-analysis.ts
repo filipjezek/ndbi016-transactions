@@ -1,15 +1,14 @@
 import { Message, MessageType } from "./message";
 
-export class SerializationGraph {
-  private conflicts: Set<number>[] = [];
+export class ScheduleAnalysis {
   private properties = {
-    serializable: false,
+    confSerializable: false,
     recoverable: false,
     cascadeless: false,
     strict: false,
   };
-  public get serializable() {
-    return this.properties.serializable;
+  public get confSerializable() {
+    return this.properties.confSerializable;
   }
   public get recoverable() {
     return this.properties.recoverable;
@@ -22,12 +21,12 @@ export class SerializationGraph {
   }
 
   constructor(private log: Message[]) {
-    this.buildGraph();
-    this.properties.serializable = this.isAcylic();
+    this.computeConflictSerializability();
     this.computeRecoveryProps();
   }
 
-  private buildGraph() {
+  private buildConflictGraph() {
+    const conflicts: Set<number>[] = [];
     const groups: Message[][] = [];
     const aborted = new Set(
       this.log
@@ -53,32 +52,38 @@ export class SerializationGraph {
           )
             continue;
 
-          if (this.conflicts[g[src].transactionId] === undefined)
-            this.conflicts[g[src].transactionId] = new Set();
-          this.conflicts[g[src].transactionId].add(g[tgt].transactionId);
+          if (conflicts[g[src].transactionId] === undefined)
+            conflicts[g[src].transactionId] = new Set();
+          conflicts[g[src].transactionId].add(g[tgt].transactionId);
         }
       }
     }
+    return conflicts;
   }
 
-  private isAcylic() {
+  private isAcylic(graph: Set<number>[]) {
     const visited: boolean[] = [];
     const stack: number[] = [];
-    for (let i = 0; i < this.conflicts.length; i++) {
-      if (!this.conflicts[i] || visited[i]) continue;
+    for (let i = 0; i < graph.length; i++) {
+      if (!graph[i] || visited[i]) continue;
       stack.push(i);
       while (stack.length) {
         const node = stack.pop();
         if (visited[node]) return false;
         visited[node] = true;
-        if (this.conflicts[node]) {
-          for (const neighbor of this.conflicts[node]) {
+        if (graph[node]) {
+          for (const neighbor of graph[node]) {
             stack.push(neighbor);
           }
         }
       }
     }
     return true;
+  }
+
+  private computeConflictSerializability() {
+    const conflicts = this.buildConflictGraph();
+    this.properties.confSerializable = this.isAcylic(conflicts);
   }
 
   private computeRecoveryProps() {

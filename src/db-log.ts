@@ -1,6 +1,6 @@
 import { Message, MessageType } from "./message";
 import chalk from "chalk";
-import { SerializationGraph } from "./serialization-graph";
+import { ScheduleAnalysis } from "./schedule-analysis";
 
 export class DBLog {
   private log: Message[] = [];
@@ -21,7 +21,7 @@ export class DBLog {
     "#ccebc5",
     "#ffed6f",
   ];
-  public graph: SerializationGraph;
+  public analysis: ScheduleAnalysis;
 
   public append(msg: Message) {
     this.log.push(msg);
@@ -39,23 +39,23 @@ export class DBLog {
   }
 
   public printProperties() {
-    this.recalculateProperties();
+    this.analyse();
     console.log("Properties:");
     console.log(
       "Conflict serializable:",
-      this.graph.serializable ? chalk.green("true") : chalk.red("false")
+      this.analysis.confSerializable ? chalk.green("true") : chalk.red("false")
     );
     console.log(
       "Recoverable:",
-      this.graph.recoverable ? chalk.green("true") : chalk.red("false")
+      this.analysis.recoverable ? chalk.green("true") : chalk.red("false")
     );
     console.log(
       "Cascadeless:",
-      this.graph.cascadeless ? chalk.green("true") : chalk.red("false")
+      this.analysis.cascadeless ? chalk.green("true") : chalk.red("false")
     );
     console.log(
       "Strict:",
-      this.graph.strict ? chalk.green("true") : chalk.red("false")
+      this.analysis.strict ? chalk.green("true") : chalk.red("false")
     );
   }
 
@@ -72,8 +72,8 @@ export class DBLog {
     process.stdout.write(chalk.hex(color)(str) + " ");
   }
 
-  public recalculateProperties() {
-    this.graph = new SerializationGraph(this.log);
+  public analyse() {
+    this.analysis = new ScheduleAnalysis(this.log);
   }
 
   public export(historyId: number, separator = ",") {
@@ -98,6 +98,6 @@ export class DBLog {
         address: address === "" ? undefined : +address,
       } as Message;
     });
-    this.graph = null;
+    this.analysis = null;
   }
 }
