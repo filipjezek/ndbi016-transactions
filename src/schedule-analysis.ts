@@ -1,3 +1,4 @@
+import { Graph } from "./graph";
 import { Message, MessageType } from "./message";
 
 export class ScheduleAnalysis {
@@ -21,12 +22,13 @@ export class ScheduleAnalysis {
   }
 
   constructor(private log: Message[]) {
-    this.computeConflictSerializability();
-    this.computeRecoveryProps();
+    this.computeConflictSerializable();
+    this.computeRecoverable();
+    this.computeCascadelessStrict();
   }
 
   private buildConflictGraph() {
-    const conflicts: Set<number>[] = [];
+    const graph = new Graph();
     const groups: Message[][] = [];
     const aborted = new Set(
       this.log
@@ -52,52 +54,25 @@ export class ScheduleAnalysis {
           )
             continue;
 
-          if (conflicts[g[src].transactionId] === undefined)
-            conflicts[g[src].transactionId] = new Set();
-          conflicts[g[src].transactionId].add(g[tgt].transactionId);
+          graph.addEdge(g[src].transactionId, g[tgt].transactionId);
         }
       }
     }
-    return conflicts;
+    return graph;
   }
 
-  private isAcylic(graph: Set<number>[]) {
-    const visited: boolean[] = [];
-    const stack: number[] = [];
-    for (let i = 0; i < graph.length; i++) {
-      if (!graph[i] || visited[i]) continue;
-      stack.push(i);
-      while (stack.length) {
-        const node = stack.pop();
-        if (visited[node]) return false;
-        visited[node] = true;
-        if (graph[node]) {
-          for (const neighbor of graph[node]) {
-            stack.push(neighbor);
-          }
-        }
-      }
-    }
-    return true;
-  }
-
-  private computeConflictSerializability() {
+  private computeConflictSerializable() {
     const conflicts = this.buildConflictGraph();
-    this.properties.confSerializable = this.isAcylic(conflicts);
+    this.properties.confSerializable = conflicts.getACycle() === null;
   }
 
-  private computeRecoveryProps() {
-    this.properties.recoverable = true;
+  private computeCascadelessStrict() {
     this.properties.cascadeless = true;
     this.properties.strict = true;
     /**
      * tids indexed by addresses
      */
     const uncommittedWrites: number[] = [];
-    /**
-     * addresses indexed by tids
-     */
-    const readAddresses: Set<number>[] = [];
 
     for (const m of this.log) {
       if (m.type === MessageType.Read || m.type === MessageType.Write) {
@@ -116,11 +91,6 @@ export class ScheduleAnalysis {
 
         if (m.type === MessageType.Write) {
           uncommittedWrites[m.address] = m.transactionId;
-        } else {
-          if (readAddresses[m.transactionId] === undefined) {
-            readAddresses[m.transactionId] = new Set();
-          }
-          readAddresses[m.transactionId].add(m.address);
         }
       } else if (
         m.type === MessageType.Abort ||
@@ -131,17 +101,38 @@ export class ScheduleAnalysis {
             uncommittedWrites[addr] = undefined;
           }
         });
-        if (readAddresses[m.transactionId] && m.type === MessageType.Commit) {
-          for (const addr of readAddresses[m.transactionId]) {
-            if (
-              uncommittedWrites[addr] !== undefined &&
-              uncommittedWrites[addr] !== m.transactionId
-            ) {
-              // transaction has read an uncommitted write
-              this.properties.recoverable = false;
-            }
-          }
+      }
+    }
+  }
+
+  private computeRecoverable() {
+    this.properties.recoverable = true;
+    const wrDeps = new Graph();
+    const uncommittedWrites: number[] = [];
+
+    for (const m of this.log) {
+      if (m.type === MessageType.Read) {
+        if (
+          uncommittedWrites[m.address] !== undefined &&
+          uncommittedWrites[m.address] !== m.transactionId
+        ) {
+          wrDeps.addEdge(m.transactionId, uncommittedWrites[m.address]);
         }
+      } else if (m.type === MessageType.Write) {
+        uncommittedWrites[m.address] = m.transactionId;
+      } else if (m.type === MessageType.Abort) {
+        wrDeps.removeNode(m.transactionId);
+        uncommittedWrites.forEach((tid, addr) => {
+          if (tid === m.transactionId) {
+            uncommittedWrites[addr] = undefined;
+          }
+        });
+      } else if (m.type === MessageType.Commit) {
+        if (wrDeps.data.get(m.transactionId)?.size) {
+          this.properties.recoverable = false;
+          break;
+        }
+        wrDeps.removeNode(m.transactionId);
       }
     }
   }
