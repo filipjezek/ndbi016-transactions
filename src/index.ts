@@ -1,5 +1,4 @@
 import { AppStub } from "./app-stubs/app-stub";
-import { ConsistencyChecker } from "./app-stubs/consistency-checker";
 import { RandomApp } from "./app-stubs/random-app";
 import { TrafficSimulator } from "./traffic-simulator";
 import { TransactionManager } from "./transaction-manager";
@@ -11,9 +10,6 @@ async function runConcurrently() {
   for (const seed of Array.from({ length: 4 }, () => globalRNG.random() + "")) {
     apps.push(new RandomApp(traffic.connect(), { addressCount: 100, seed }));
   }
-  // apps.push(
-  //   new ConsistencyChecker(traffic.connect(), { addressCount: 100, sum: 15 })
-  // );
 
   apps.forEach(async (app) => {
     await app.runOnce();
@@ -46,13 +42,8 @@ const tm = new TransactionManager(traffic, { sum: 15, size: 100 });
 await runConcurrently();
 tm.log.print();
 tm.log.printProperties();
-// printArray(tm.data);
-// await replaySequentially([0, 1]);
-// await replaySequentially([1, 0]);
-
-/*
-RED: 16, 29, 47, 67
-PURPLE: 6, 30, 83, 86, 92, 97
-GREEN: 40, 44
-YELLOW: 48, 56, 88, 92
-*/
+console.log(
+  `Blocked times: ${tm.blockedTimes} / ${tm.log.data.length} = ${
+    (tm.blockedTimes / tm.log.data.length) * 100
+  }%`
+);

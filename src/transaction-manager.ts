@@ -17,6 +17,7 @@ export class TransactionManager {
     return this._data as readonly number[];
   }
   public readonly log = new DBLog();
+  public blockedTimes = 0;
   private locks: CellLock[];
   private dependencies = new Graph();
 
@@ -66,6 +67,8 @@ export class TransactionManager {
     }
     if (completed) {
       this.log.append(msg);
+    } else {
+      this.blockedTimes++;
     }
     return completed;
   }
