@@ -20,10 +20,19 @@ export class TrafficSimulator {
     return conn;
   }
 
-  public getMessage() {
-    if (this.msgBuffer.length === 0) return null;
+  /**
+   * @param cb this callback will be called with the next message.
+   * If the callback returns true, the message will be removed from the buffer, otherwise it will be blocked
+   */
+  public getMessage(cb: (m: Message) => boolean) {
+    if (this.msgBuffer.length === 0) {
+      cb(null);
+      return;
+    }
     const i = globalRNG.randint(this.msgBuffer.length);
-    return this.msgBuffer.splice(i, 1)[0];
+    if (cb(this.msgBuffer[i])) {
+      this.msgBuffer.splice(i, 1)[0];
+    }
   }
 }
 

@@ -22,20 +22,29 @@ export class DBLog {
     "#ffed6f",
   ];
   public analysis: ScheduleAnalysis;
+  private tids = new Set<number>();
 
   public append(msg: Message) {
     this.log.push(msg);
+    this.tids.add(msg.transactionId);
   }
 
   public print() {
-    process.stdout.write("DB Log:");
-    this.log.forEach((msg, i) => {
-      if (i % 8 === 0) {
-        process.stdout.write("\n");
-      }
-      this.printMessage(msg);
+    console.log("DB Log:");
+    const tids = Array.from(this.tids).sort((a, b) => a - b);
+    const cols = new Map<number, number>(tids.map((tid, i) => [tid, i]));
+
+    tids.forEach((tid, i) => {
+      const color = this.palette[i % this.palette.length];
+      const padded = `T${tid}`.padEnd(10);
+      process.stdout.write(chalk.hex(color)(padded));
     });
     console.log();
+    this.log.forEach((msg) => {
+      process.stdout.write(" ".repeat(10 * cols.get(msg.transactionId)));
+      this.printMessage(msg);
+      console.log();
+    });
   }
 
   public printProperties() {

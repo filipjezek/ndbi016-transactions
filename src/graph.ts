@@ -19,25 +19,35 @@ export class Graph {
   public getACycle() {
     const visited = new Set<number>();
     const stack: number[] = [];
-    const path: number[] = [];
+    let path: number[];
+    let cycleFound = false;
 
     for (const n of this.adjacencyList.keys()) {
+      if (cycleFound) break;
       if (visited.has(n)) continue;
       stack.push(n);
+      path = [];
       while (stack.length) {
         const node = stack.pop();
         path.push(node);
-        if (visited.has(node)) break;
+        if (visited.has(node)) {
+          cycleFound = true;
+          break;
+        }
         visited.add(node);
         this.adjacencyList.get(node).forEach((neighbor) => {
           stack.push(neighbor);
         });
       }
     }
-    while (path.length > 1 && path[0] !== path[path.length - 1]) {
-      path.shift();
+    if (cycleFound) {
+      console.log("Cycle found", path);
+      while (path.length > 1 && path[0] !== path[path.length - 1]) {
+        path.shift();
+      }
+      return path;
     }
-    return path.length > 1 ? path : null;
+    return null;
   }
 
   public removeNode(node: number) {

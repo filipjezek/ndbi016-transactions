@@ -120,19 +120,23 @@ export class ScheduleAnalysis {
         }
       } else if (m.type === MessageType.Write) {
         uncommittedWrites[m.address] = m.transactionId;
-      } else if (m.type === MessageType.Abort) {
+      } else if (
+        m.type === MessageType.Abort ||
+        m.type === MessageType.Commit
+      ) {
+        if (
+          m.type === MessageType.Commit &&
+          wrDeps.data.get(m.transactionId)?.size
+        ) {
+          this.properties.recoverable = false;
+          break;
+        }
         wrDeps.removeNode(m.transactionId);
         uncommittedWrites.forEach((tid, addr) => {
           if (tid === m.transactionId) {
             uncommittedWrites[addr] = undefined;
           }
         });
-      } else if (m.type === MessageType.Commit) {
-        if (wrDeps.data.get(m.transactionId)?.size) {
-          this.properties.recoverable = false;
-          break;
-        }
-        wrDeps.removeNode(m.transactionId);
       }
     }
   }

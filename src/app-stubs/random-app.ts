@@ -30,7 +30,7 @@ export class RandomApp implements AppStub {
       await this.moveRandomAmount();
     }
 
-    if (this.rng.random() > 0.5) {
+    if (this.rng.random() > 0) {
       await this.conn.commit();
     } else {
       if (this.rng.random() > 0.5) {

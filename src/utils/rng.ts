@@ -49,4 +49,4 @@ export class SeededRNG {
   }
 }
 
-export const globalRNG = new SeededRNG("foobar");
+export const globalRNG = new SeededRNG("abcdef");

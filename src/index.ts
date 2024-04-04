@@ -4,15 +4,16 @@ import { RandomApp } from "./app-stubs/random-app";
 import { TrafficSimulator } from "./traffic-simulator";
 import { TransactionManager } from "./transaction-manager";
 import { printArray } from "./utils/print-array";
+import { globalRNG } from "./utils/rng";
 
 async function runConcurrently() {
   apps = [];
-  for (const seed of ["cnoaseop", "ofsú"]) {
-    apps.push(new RandomApp(traffic.connect(), { addressCount: 10, seed }));
+  for (const seed of Array.from({ length: 4 }, () => globalRNG.random() + "")) {
+    apps.push(new RandomApp(traffic.connect(), { addressCount: 100, seed }));
   }
-  apps.push(
-    new ConsistencyChecker(traffic.connect(), { addressCount: 10, sum: 15 })
-  );
+  // apps.push(
+  //   new ConsistencyChecker(traffic.connect(), { addressCount: 100, sum: 15 })
+  // );
 
   apps.forEach(async (app) => {
     await app.runOnce();
@@ -41,10 +42,17 @@ async function replaySequentially(permutation: number[]) {
 
 let apps: AppStub[] = [];
 const traffic = new TrafficSimulator();
-const tm = new TransactionManager(traffic, { sum: 15, size: 10 });
+const tm = new TransactionManager(traffic, { sum: 15, size: 100 });
 await runConcurrently();
 tm.log.print();
 tm.log.printProperties();
-printArray(tm.data);
-await replaySequentially([0, 1]);
-await replaySequentially([1, 0]);
+// printArray(tm.data);
+// await replaySequentially([0, 1]);
+// await replaySequentially([1, 0]);
+
+/*
+RED: 16, 29, 47, 67
+PURPLE: 6, 30, 83, 86, 92, 97
+GREEN: 40, 44
+YELLOW: 48, 56, 88, 92
+*/
