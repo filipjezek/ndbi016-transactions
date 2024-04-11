@@ -111,10 +111,11 @@ export class TransactionManager {
     }
     const cycle = this.dependencies.getACycle();
     if (cycle) {
-      console.log(tid);
-      console.log(...this.locks[address].holders());
-      console.log(this.dependencies.data);
-      throw new Error(`Deadlock detected: ${cycle.join(" -> ")}`);
+      throw new Error(
+        `Deadlock detected while T${tid} tried to access ${address}: ${cycle.join(
+          " -> "
+        )}`
+      );
     }
   }
 }

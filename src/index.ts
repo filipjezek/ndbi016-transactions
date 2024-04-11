@@ -4,11 +4,12 @@ import { TrafficSimulator } from "./traffic-simulator";
 import { TransactionManager } from "./transaction-manager";
 import { printArray } from "./utils/print-array";
 import { globalRNG } from "./utils/rng";
+import chalk from "chalk";
 
 async function runConcurrently() {
   apps = [];
-  for (const seed of Array.from({ length: 4 }, () => globalRNG.random() + "")) {
-    apps.push(new RandomApp(traffic.connect(), { addressCount: 100, seed }));
+  for (const seed of Array.from({ length: 3 }, () => globalRNG.random() + "")) {
+    apps.push(new RandomApp(traffic.connect(), { addressCount: 20, seed }));
   }
 
   apps.forEach(async (app) => {
@@ -38,12 +39,17 @@ async function replaySequentially(permutation: number[]) {
 
 let apps: AppStub[] = [];
 const traffic = new TrafficSimulator();
-const tm = new TransactionManager(traffic, { sum: 15, size: 100 });
-await runConcurrently();
-tm.log.print();
-tm.log.printProperties();
-console.log(
-  `Blocked times: ${tm.blockedTimes} / ${tm.log.data.length} = ${
-    (tm.blockedTimes / tm.log.data.length) * 100
-  }%`
-);
+const tm = new TransactionManager(traffic, { sum: 15, size: 20 });
+try {
+  await runConcurrently();
+} catch (e) {
+  console.log(chalk.redBright((e as Error).message));
+} finally {
+  tm.log.print();
+  tm.log.printProperties();
+  console.log(
+    `Blocked times: ${tm.blockedTimes} / ${tm.log.data.length} = ${
+      (tm.blockedTimes / tm.log.data.length) * 100
+    }%`
+  );
+}

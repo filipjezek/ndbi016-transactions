@@ -41,7 +41,6 @@ export class Graph {
       }
     }
     if (cycleFound) {
-      console.log("Cycle found", path);
       while (path.length > 1 && path[0] !== path[path.length - 1]) {
         path.shift();
       }
