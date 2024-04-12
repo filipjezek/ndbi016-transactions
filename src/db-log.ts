@@ -1,9 +1,25 @@
-import { Message, MessageType } from "./message";
+import {
+  ControlMessage,
+  Message,
+  MessageType,
+  ReadMessage,
+  WriteMessage,
+} from "./message";
 import chalk from "chalk";
 import { ScheduleAnalysis } from "./schedule-analysis";
 
+export type UpdateRecord = WriteMessage & {
+  previousData: number;
+  previousUpdate: UpdateRecord | null;
+};
+
 export class DBLog {
-  private log: Message[] = [];
+  /**
+   * indexed by transaction id
+   */
+  private lastUpdates: Map<number, UpdateRecord> = new Map();
+
+  private log: (Message | UpdateRecord)[] = [];
   public get data() {
     return this.log as readonly Message[];
   }
@@ -24,9 +40,36 @@ export class DBLog {
   public analysis: ScheduleAnalysis;
   private tids = new Set<number>();
 
-  public append(msg: Message) {
-    this.log.push(msg);
+  public append(msg: WriteMessage, previousData: number): void;
+  public append(msg: ControlMessage | ReadMessage): void;
+  public append(msg: Message, previousData?: number): void {
+    if (msg.type === MessageType.Write) {
+      const updateRec = {
+        ...msg,
+        previousData,
+        previousUpdate: this.lastUpdates.get(msg.transactionId) || null,
+      };
+      this.lastUpdates.set(msg.transactionId, updateRec);
+      this.log.push(updateRec);
+    } else {
+      this.log.push(msg);
+    }
     this.tids.add(msg.transactionId);
+  }
+
+  public getReverseChanges(tid: number): { address: number; data: number }[] {
+    const changes = new Map<number, number>();
+    for (
+      let updateRec = this.lastUpdates.get(tid);
+      updateRec != null;
+      updateRec = updateRec.previousUpdate
+    ) {
+      changes.set(updateRec.address, updateRec.previousData);
+    }
+    return Array.from(changes.entries()).map(([address, data]) => ({
+      address,
+      data,
+    }));
   }
 
   public print() {
@@ -108,5 +151,15 @@ export class DBLog {
       } as Message;
     });
     this.analysis = null;
+  }
+
+  public getBlockableMessageCount() {
+    let c = 0;
+    for (const msg of this.log) {
+      if (msg.type === MessageType.Read || msg.type === MessageType.Write) {
+        c++;
+      }
+    }
+    return c;
   }
 }

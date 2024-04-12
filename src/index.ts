@@ -1,15 +1,25 @@
-import { AppStub } from "./app-stubs/app-stub";
 import { RandomApp } from "./app-stubs/random-app";
 import { TrafficSimulator } from "./traffic-simulator";
 import { TransactionManager } from "./transaction-manager";
-import { printArray } from "./utils/print-array";
-import { globalRNG } from "./utils/rng";
-import chalk from "chalk";
+import { SeededRNG, globalRNG } from "./utils/rng";
+import { ChartJSNodeCanvas } from "chartjs-node-canvas";
+import fs from "node:fs/promises";
+import { avg } from "./utils/avg";
 
-async function runConcurrently() {
-  apps = [];
-  for (const seed of Array.from({ length: 3 }, () => globalRNG.random() + "")) {
-    apps.push(new RandomApp(traffic.connect(), { addressCount: 20, seed }));
+async function runConcurrently(
+  appCount: number,
+  dbSize: number,
+  seed?: string
+): Promise<TransactionManager> {
+  const apps = [];
+  const traffic = new TrafficSimulator(seed);
+  const rng = seed === undefined ? globalRNG : new SeededRNG(seed);
+  const tm = new TransactionManager(traffic, { sum: 15, size: dbSize });
+  for (const seed of Array.from(
+    { length: appCount },
+    () => rng.random() + ""
+  )) {
+    apps.push(new RandomApp(traffic.connect(), { addressCount: dbSize, seed }));
   }
 
   apps.forEach(async (app) => {
@@ -18,38 +28,89 @@ async function runConcurrently() {
   });
 
   await tm.run();
+  return tm;
 }
 
-async function replaySequentially(permutation: number[]) {
-  const seqTm = new TransactionManager(traffic, { sum: 15, size: 10 });
-
-  const sequence = (async () => {
-    for (const tid of permutation) {
-      const app = apps[tid] as RandomApp;
-      app.reset(traffic.connect());
-      await app.runOnce();
-      await app.exit();
-    }
-  })();
-  await seqTm.run();
-  printArray(seqTm.data, tm.data);
-  seqTm.log.print();
-  seqTm.log.printProperties();
-}
-
-let apps: AppStub[] = [];
-const traffic = new TrafficSimulator();
-const tm = new TransactionManager(traffic, { sum: 15, size: 20 });
-try {
-  await runConcurrently();
-} catch (e) {
-  console.log(chalk.redBright((e as Error).message));
-} finally {
+function printInfo(tm: TransactionManager) {
   tm.log.print();
   tm.log.printProperties();
+  const blockableCount = tm.log.getBlockableMessageCount();
   console.log(
-    `Blocked times: ${tm.blockedTimes} / ${tm.log.data.length} = ${
-      (tm.blockedTimes / tm.log.data.length) * 100
+    `Blocked times: ${tm.blockedTimes} / ${blockableCount} = ${
+      (tm.blockedTimes / blockableCount) * 100
+    }%`
+  );
+  console.log(
+    `Deadlocked times: ${tm.deadlockedTimes} / ${blockableCount} = ${
+      (tm.deadlockedTimes / blockableCount) * 100
     }%`
   );
 }
+
+async function drawGraph(
+  sizes: number[],
+  blocks: number[],
+  deadlocks: number[]
+) {
+  const buffer = await canv.renderToBuffer({
+    type: "line",
+    data: {
+      labels: sizes.map((s) => s + ""),
+      datasets: [
+        {
+          label: "Blocked %",
+          data: blocks,
+          fill: false,
+          tension: 0.1,
+          borderColor: "rgb(75, 192, 192)",
+        },
+        {
+          label: "Deadlocked %",
+          data: deadlocks,
+          fill: false,
+          borderColor: "rgb(255, 99, 132)",
+          tension: 0.1,
+        },
+      ],
+    },
+  });
+  await fs.writeFile("graph.png", buffer);
+}
+
+async function prepareGraphData() {
+  const sizes = [10, 20, 50, 100, 200, 500];
+  const seeds = Array.from({ length: 20 }, () => globalRNG.random() + "");
+  const avgs = await Promise.all(
+    sizes.map(async (size) => {
+      const tms = await Promise.all(
+        seeds.map((s) => runConcurrently(10, size, s))
+      );
+      return [
+        avg(
+          tms.map(
+            (tm) => (tm.blockedTimes / tm.log.getBlockableMessageCount()) * 100
+          )
+        ),
+        avg(
+          tms.map(
+            (tm) =>
+              (tm.deadlockedTimes / tm.log.getBlockableMessageCount()) * 100
+          )
+        ),
+      ];
+    })
+  );
+  return {
+    sizes,
+    blocks: avgs.map((a) => a[0]),
+    deadlocks: avgs.map((a) => a[1]),
+  };
+}
+
+const canv = new ChartJSNodeCanvas({
+  width: 400,
+  height: 400,
+  backgroundColour: "white",
+});
+const graphData = await prepareGraphData();
+await drawGraph(graphData.sizes, graphData.blocks, graphData.deadlocks);

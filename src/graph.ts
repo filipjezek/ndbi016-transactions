@@ -16,6 +16,10 @@ export class Graph {
     this.adjacencyList.get(from).add(to);
   }
 
+  public removeEdge(from: number, to: number) {
+    this.adjacencyList.get(from)?.delete(to);
+  }
+
   public getACycle() {
     const visited = new Set<number>();
     const stack: number[] = [];
@@ -27,6 +31,7 @@ export class Graph {
       if (visited.has(n)) continue;
       stack.push(n);
       path = [];
+      visited.clear();
       while (stack.length) {
         const node = stack.pop();
         path.push(node);
@@ -53,6 +58,17 @@ export class Graph {
     this.adjacencyList.delete(node);
     for (const neighbors of this.adjacencyList.values()) {
       neighbors.delete(node);
+    }
+  }
+
+  public replaceNode(oldNode: number, newNode: number) {
+    const neighbors = this.adjacencyList.get(oldNode);
+    this.adjacencyList.delete(oldNode);
+    this.adjacencyList.set(newNode, neighbors);
+    for (const otherNeighbors of this.adjacencyList.values()) {
+      if (otherNeighbors.delete(oldNode)) {
+        otherNeighbors.add(newNode);
+      }
     }
   }
 }

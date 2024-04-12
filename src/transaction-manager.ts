@@ -8,7 +8,7 @@ import {
   ReadMessage,
   WriteMessage,
 } from "./message";
-import { TrafficSimulator } from "./traffic-simulator";
+import { Connection, TrafficSimulator } from "./traffic-simulator";
 import { promiseTimeout } from "./utils/promise-timeout";
 
 export class TransactionManager {
@@ -18,8 +18,11 @@ export class TransactionManager {
   }
   public readonly log = new DBLog();
   public blockedTimes = 0;
+  public deadlockedTimes = 0;
   private locks: CellLock[];
+  private tranResources: Map<number, Set<number>> = new Map();
   private dependencies = new Graph();
+  private handlingDeadlock = false;
 
   constructor(
     private traffic: TrafficSimulator,
@@ -65,42 +68,81 @@ export class TransactionManager {
         this.handleAbort(msg);
         break;
     }
-    if (completed) {
-      this.log.append(msg);
-    } else {
+    if (!completed) {
       this.blockedTimes++;
     }
     return completed;
   }
 
   private handleStart(msg: ControlMessage) {
+    this.log.append(msg);
+    this.tranResources.set(msg.transactionId, new Set());
     msg.callback();
   }
   private handleRead(msg: ReadMessage): boolean {
+    this.tranResources.get(msg.transactionId).add(msg.address);
     if (!this.locks[msg.address].tryAcquireSharedLock(msg.transactionId)) {
       this.addDeps(msg.transactionId, msg.address);
       return false;
     }
+    this.log.append(msg);
     msg.callback(this._data[msg.address]);
     return true;
   }
   private handleWrite(msg: WriteMessage): boolean {
+    this.tranResources.get(msg.transactionId).add(msg.address);
     if (!this.locks[msg.address].tryAcquireExclusiveLock(msg.transactionId)) {
       this.addDeps(msg.transactionId, msg.address);
       return false;
     }
+    this.log.append(msg, this._data[msg.address]);
     this._data[msg.address] = msg.data;
     msg.callback();
     return true;
   }
   private handleCommit(msg: ControlMessage) {
-    this.locks.forEach((lock) => lock.release(msg.transactionId));
+    this.log.append(msg);
+    this.tranResources
+      .get(msg.transactionId)
+      .forEach((addr) => this.locks[addr].release(msg.transactionId));
     this.dependencies.removeNode(msg.transactionId);
+    this.tranResources.delete(msg.transactionId);
     msg.callback();
   }
   private handleAbort(msg: ControlMessage) {
-    this.locks.forEach((lock) => lock.release(msg.transactionId));
-    this.dependencies.removeNode(msg.transactionId);
+    this.log.append(msg);
+
+    const rollbackTid = Connection.newTID();
+    const resources = this.tranResources.get(msg.transactionId);
+    this.tranResources.delete(msg.transactionId);
+    resources.forEach((addr) =>
+      this.locks[addr].replace(msg.transactionId, rollbackTid)
+    );
+    this.dependencies.replaceNode(msg.transactionId, rollbackTid);
+
+    this.handleStart({
+      transactionId: rollbackTid,
+      type: MessageType.Start,
+      callback: () => {},
+    });
+    this.tranResources.set(rollbackTid, resources);
+    this.log
+      .getReverseChanges(msg.transactionId)
+      .forEach(({ address, data }) => {
+        this.handleWrite({
+          address,
+          data,
+          transactionId: rollbackTid,
+          type: MessageType.Write,
+          callback: () => {},
+        });
+      });
+    this.handleCommit({
+      transactionId: rollbackTid,
+      type: MessageType.Commit,
+      callback: () => {},
+    });
+
     msg.callback();
   }
 
@@ -109,13 +151,33 @@ export class TransactionManager {
       if (holder === tid) continue;
       this.dependencies.addEdge(holder, tid);
     }
+    if (this.handlingDeadlock) return;
+
     const cycle = this.dependencies.getACycle();
     if (cycle) {
-      throw new Error(
-        `Deadlock detected while T${tid} tried to access ${address}: ${cycle.join(
-          " -> "
-        )}`
-      );
+      this.handleDeadlock(cycle);
     }
+  }
+
+  private handleDeadlock(cycle: number[]) {
+    this.handlingDeadlock = true;
+    this.deadlockedTimes++;
+
+    // find transaction holding the least resources (should be faster to rollback)
+    const victim = cycle.reduce(
+      ([minKey, minVal], b) => {
+        const val = this.tranResources.get(b).size;
+        return val < minVal ? [b, val] : [minKey, minVal];
+      },
+      [-1, Infinity]
+    )[0];
+
+    this.handleAbort({
+      transactionId: victim,
+      type: MessageType.Abort,
+      callback: () => {},
+    });
+    this.traffic.notifyAbort(victim);
+    this.handlingDeadlock = false;
   }
 }

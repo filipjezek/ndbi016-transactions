@@ -24,21 +24,23 @@ export class RandomApp implements AppStub {
   }
 
   public async runOnce() {
-    await this.conn.startTransaction();
+    try {
+      await this.conn.startTransaction();
 
-    while (this.rng.random() > 0.2) {
-      await this.moveRandomAmount();
-    }
-
-    if (this.rng.random() > 0) {
-      await this.conn.commit();
-    } else {
-      if (this.rng.random() > 0.5) {
-        await this.inconsistentAbort();
-      } else {
-        await this.conn.abort();
+      while (this.rng.random() > 0.2) {
+        await this.moveRandomAmount();
       }
-    }
+
+      if (this.rng.random() > 0) {
+        await this.conn.commit();
+      } else {
+        if (this.rng.random() > 0.5) {
+          await this.inconsistentAbort();
+        } else {
+          await this.conn.abort();
+        }
+      }
+    } catch (e) {}
   }
 
   public async runIndefinitely() {

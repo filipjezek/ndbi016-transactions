@@ -22,6 +22,13 @@ export class CellLock {
     if (this._exclusiveLock === tid) this._exclusiveLock = null;
   }
 
+  public replace(oldTid: number, newTid: number): void {
+    if (this._exclusiveLock === oldTid) this._exclusiveLock = newTid;
+    if (this._sharedLocks.delete(oldTid)) {
+      this._sharedLocks.add(newTid);
+    }
+  }
+
   public *holders(): Iterable<number> {
     if (this._exclusiveLock !== null) yield this._exclusiveLock;
     yield* this._sharedLocks;

@@ -2,12 +2,12 @@ export type Message = ControlMessage | ReadMessage | WriteMessage;
 
 interface MsgCommon {
   transactionId: number;
-  callback: () => void;
+  callback: (e?: Error) => void;
 }
 export interface ReadMessage extends Omit<MsgCommon, "callback"> {
   type: MessageType.Read;
   address: number;
-  callback: (data: number) => void;
+  callback: (data: number | Error) => void;
 }
 export interface WriteMessage extends MsgCommon {
   type: MessageType.Write;

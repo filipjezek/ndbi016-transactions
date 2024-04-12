@@ -1,5 +1,5 @@
 import { Message, MessageType } from "./message";
-import { globalRNG } from "./utils/rng";
+import { SeededRNG, globalRNG } from "./utils/rng";
 
 /**
  * collects messages from multiple sources and outputs one continous stream of messages
@@ -7,6 +7,11 @@ import { globalRNG } from "./utils/rng";
 export class TrafficSimulator {
   private msgBuffer: Message[] = [];
   private connections: Connection[] = [];
+  private rng: SeededRNG;
+
+  constructor(private seed?: string) {
+    this.rng = seed === undefined ? new SeededRNG(seed) : globalRNG;
+  }
 
   public hasTraffic() {
     return this.connections.some((c) => c.active);
@@ -29,10 +34,19 @@ export class TrafficSimulator {
       cb(null);
       return;
     }
-    const i = globalRNG.randint(this.msgBuffer.length);
+    const i = this.rng.randint(this.msgBuffer.length);
     if (cb(this.msgBuffer[i])) {
       this.msgBuffer.splice(i, 1)[0];
     }
+  }
+
+  public notifyAbort(tid: number) {
+    this.msgBuffer.forEach((m) => {
+      if (m.transactionId === tid) {
+        m.callback(new Error("Transaction aborted"));
+      }
+    });
+    this.msgBuffer = this.msgBuffer.filter((m) => m.transactionId !== tid);
   }
 }
 
@@ -45,62 +59,69 @@ export class Connection {
     return this._active;
   }
 
+  public static newTID() {
+    return Connection.transactionCount++;
+  }
+
   constructor(private sendCb: (m: Message) => void) {}
 
   public startTransaction() {
     if (this.tranRunning) throw new Error("Transaction already running");
-    this.tranId = Connection.transactionCount++;
+    this.tranId = Connection.newTID();
     this.tranRunning = true;
-    return new Promise<void>((res) => {
+    return new Promise<void>((res, rej) => {
       this.sendCb({
         type: MessageType.Start,
         transactionId: this.tranId,
-        callback: res,
+        callback: (e) =>
+          e instanceof Error ? ((this.tranRunning = false), rej(e)) : res(),
       });
     });
   }
 
   public read(address: number): Promise<number> {
-    return new Promise((res) => {
+    return new Promise((res, rej) => {
       this.sendCb({
         type: MessageType.Read,
         address,
-        callback: res,
+        callback: (e) =>
+          e instanceof Error ? ((this.tranRunning = false), rej(e)) : res(e),
         transactionId: this.tranId,
       });
     });
   }
 
   public write(address: number, data: number) {
-    return new Promise<void>((res) => {
+    return new Promise<void>((res, rej) => {
       this.sendCb({
         type: MessageType.Write,
         data,
         address,
         transactionId: this.tranId,
-        callback: res,
+        callback: (e) =>
+          e instanceof Error ? ((this.tranRunning = false), rej(e)) : res(),
       });
     });
   }
 
   public abort() {
     this.tranRunning = false;
-    return new Promise<void>((res) => {
+    return new Promise<void>((res, rej) => {
       this.sendCb({
         type: MessageType.Abort,
         transactionId: this.tranId,
-        callback: res,
+        callback: (e) => (e instanceof Error ? rej(e) : res()),
       });
     });
   }
 
   public commit() {
     this.tranRunning = false;
-    return new Promise<void>((res) => {
+    return new Promise<void>((res, rej) => {
       this.sendCb({
         type: MessageType.Commit,
         transactionId: this.tranId,
-        callback: res,
+        callback: (e) => (e instanceof Error ? rej(e) : res()),
       });
     });
   }
