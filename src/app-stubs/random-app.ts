@@ -74,10 +74,13 @@ export class RandomApp implements AppStub {
       this.options.addressFrom,
       this.options.addressFrom + this.options.addressCount
     );
-    const to = this.rng.randint(
-      this.options.addressFrom,
-      this.options.addressFrom + this.options.addressCount
-    );
+    let to = from;
+    while (to === from) {
+      to = this.rng.randint(
+        this.options.addressFrom,
+        this.options.addressFrom + this.options.addressCount
+      );
+    }
     const amount = this.rng.randint(1000);
 
     const fromValue = await this.conn.read(from);

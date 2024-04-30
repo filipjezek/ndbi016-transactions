@@ -9,7 +9,8 @@ import { avg } from "./utils/avg";
 async function runConcurrently(
   appCount: number,
   dbSize: number,
-  seed?: string
+  seed?: string,
+  iterations = 1
 ): Promise<TransactionManager> {
   const apps = [];
   const traffic = new TrafficSimulator(seed);
@@ -23,7 +24,9 @@ async function runConcurrently(
   }
 
   apps.forEach(async (app) => {
-    await app.runOnce();
+    for (let i = 0; i < iterations; i++) {
+      await app.runOnce();
+    }
     await app.exit();
   });
 
@@ -52,6 +55,11 @@ async function drawGraph(
   blocks: number[],
   deadlocks: number[]
 ) {
+  const canv = new ChartJSNodeCanvas({
+    width: 400,
+    height: 400,
+    backgroundColour: "white",
+  });
   const buffer = await canv.renderToBuffer({
     type: "line",
     data: {
@@ -107,10 +115,5 @@ async function prepareGraphData() {
   };
 }
 
-const canv = new ChartJSNodeCanvas({
-  width: 400,
-  height: 400,
-  backgroundColour: "white",
-});
-const graphData = await prepareGraphData();
-await drawGraph(graphData.sizes, graphData.blocks, graphData.deadlocks);
+const tm = await runConcurrently(2, 20, undefined, 5);
+printInfo(tm);

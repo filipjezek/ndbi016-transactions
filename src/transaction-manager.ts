@@ -50,6 +50,9 @@ export class TransactionManager {
    */
   private handleMessage(msg: Message): boolean {
     if (!msg) return;
+    if (this.log.data.length === 30) {
+      this.restart();
+    }
     let completed = true;
     switch (msg.type) {
       case MessageType.Start:
@@ -179,5 +182,24 @@ export class TransactionManager {
     });
     this.traffic.notifyAbort(victim);
     this.handlingDeadlock = false;
+  }
+
+  private restart() {
+    this.dependencies.clear();
+    this.tranResources.clear();
+    this.locks = this._data.map(() => new CellLock());
+    const relevantLogs = this.log.prepareForRecovery();
+    for (const log of relevantLogs) {
+      this.handleMessage(log);
+    }
+    this.dependencies.data.forEach((_, tid) => {
+      // abort incomplete transactions
+      this.traffic.notifyAbort(tid);
+      this.handleAbort({
+        type: MessageType.Abort,
+        transactionId: tid,
+        callback: () => {},
+      });
+    });
   }
 }

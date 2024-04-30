@@ -1,5 +1,5 @@
 import { Graph } from "./graph";
-import { Message, MessageType } from "./message";
+import { Message, MessageType, ReadMessage, WriteMessage } from "./message";
 
 export class ScheduleAnalysis {
   private properties = {
@@ -36,17 +36,33 @@ export class ScheduleAnalysis {
         .map((m) => m.transactionId)
     );
     for (const m of this.log) {
-      if (!("address" in m) || aborted.has(m.transactionId)) continue;
-      if (groups[m.address] === undefined) {
-        groups[m.address] = [];
+      if (
+        (!("address" in m) && m.type !== MessageType.Commit) ||
+        aborted.has(m.transactionId)
+      )
+        continue;
+      if (m.type === MessageType.Commit) {
+        groups.forEach((g) => g.push(m));
+        continue;
       }
-      groups[m.address].push(m);
+      const addr = (m as ReadMessage | WriteMessage).address;
+      if (groups[addr] === undefined) {
+        groups[addr] = [];
+      }
+      groups[addr].push(m);
     }
 
     for (const g of groups) {
       if (!g) continue;
       for (let src = 0; src < g.length; src++) {
         for (let tgt = src + 1; tgt < g.length; tgt++) {
+          if (
+            (g[src].transactionId === g[tgt].transactionId &&
+              g[tgt].type === MessageType.Commit) ||
+            g[src].type === MessageType.Commit
+          ) {
+            break;
+          }
           if (
             g[src].transactionId === g[tgt].transactionId ||
             (g[src].type === MessageType.Read &&

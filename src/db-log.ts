@@ -13,13 +13,30 @@ export type UpdateRecord = WriteMessage & {
   previousUpdate: UpdateRecord | null;
 };
 
+enum RecoveryMessageType {
+  Restart = "restart",
+  Checkpoint = "checkpoint",
+}
+interface CheckpointMessage {
+  type: RecoveryMessageType.Checkpoint;
+  ongoing: UpdateRecord[];
+}
+interface RestartMessage {
+  type: RecoveryMessageType.Restart;
+}
+type RecoveryMessage = CheckpointMessage | RestartMessage;
+
 export class DBLog {
   /**
    * indexed by transaction id
    */
   private lastUpdates: Map<number, UpdateRecord> = new Map();
+  private checkpointedOngoing: Set<number> = new Set();
 
-  private log: (Message | UpdateRecord)[] = [];
+  private log: (Message | UpdateRecord | RecoveryMessage)[] = [
+    { type: RecoveryMessageType.Checkpoint, ongoing: [] },
+    { type: RecoveryMessageType.Checkpoint, ongoing: [] },
+  ];
   public get data() {
     return this.log as readonly Message[];
   }
@@ -39,6 +56,16 @@ export class DBLog {
   ];
   public analysis: ScheduleAnalysis;
   private tids = new Set<number>();
+  private *regularMessages() {
+    for (const msg of this.log) {
+      if (
+        msg.type !== RecoveryMessageType.Checkpoint &&
+        msg.type !== RecoveryMessageType.Restart
+      ) {
+        yield msg;
+      }
+    }
+  }
 
   public append(msg: WriteMessage, previousData: number): void;
   public append(msg: ControlMessage | ReadMessage): void;
@@ -53,6 +80,13 @@ export class DBLog {
       this.log.push(updateRec);
     } else {
       this.log.push(msg);
+      if (msg.type === MessageType.Commit || msg.type === MessageType.Abort) {
+        this.lastUpdates.delete(msg.transactionId);
+        this.checkpointedOngoing.delete(msg.transactionId);
+        if (this.checkpointedOngoing.size === 0) {
+          this.checkpoint();
+        }
+      }
     }
     this.tids.add(msg.transactionId);
   }
@@ -84,6 +118,13 @@ export class DBLog {
     });
     console.log();
     this.log.forEach((msg) => {
+      if (
+        msg.type === RecoveryMessageType.Checkpoint ||
+        msg.type === RecoveryMessageType.Restart
+      ) {
+        console.log(msg.type);
+        return;
+      }
       process.stdout.write(" ".repeat(10 * cols.get(msg.transactionId)));
       this.printMessage(msg);
       console.log();
@@ -125,11 +166,11 @@ export class DBLog {
   }
 
   public analyse() {
-    this.analysis = new ScheduleAnalysis(this.log);
+    this.analysis = new ScheduleAnalysis([...this.regularMessages()]);
   }
 
   public export(historyId: number, separator = ",") {
-    return this.log
+    return [...this.regularMessages()]
       .map((msg) => {
         return [
           msg.transactionId,
@@ -161,5 +202,53 @@ export class DBLog {
       }
     }
     return c;
+  }
+
+  private checkpoint() {
+    const ongoing = Array.from(this.lastUpdates.values());
+    this.checkpointedOngoing = new Set(ongoing.map((u) => u.transactionId));
+    this.log.push({ type: RecoveryMessageType.Checkpoint, ongoing });
+  }
+
+  public prepareForRecovery() {
+    this.lastUpdates.clear();
+    let lastCheckpointPassed = false;
+    let restartMsgIndex: number = null;
+    let i = this.log.length - 1;
+    for (; i >= 0; i--) {
+      const msg = this.log[i];
+      if (msg.type === RecoveryMessageType.Checkpoint) {
+        if (lastCheckpointPassed) {
+          break;
+        }
+        lastCheckpointPassed = true;
+        this.checkpointedOngoing = new Set(
+          msg.ongoing.map((u) => u.transactionId)
+        );
+      } else if (msg.type === RecoveryMessageType.Restart) {
+        restartMsgIndex = i;
+      }
+    }
+
+    if (restartMsgIndex != null) {
+      this.log.splice(restartMsgIndex);
+    }
+    this.log.push({ type: RecoveryMessageType.Restart });
+    let relevantMessages = this.log
+      .slice(i + 1)
+      .filter(
+        (msg) => msg.type !== RecoveryMessageType.Checkpoint
+      ) as Message[];
+    let startedTids = new Set<number>(
+      relevantMessages
+        .filter((m) => m.type === MessageType.Start)
+        .map((m) => m.transactionId)
+    );
+    relevantMessages = relevantMessages.filter((m) =>
+      startedTids.has(m.transactionId)
+    );
+    console.log("Relevant messages:");
+    console.log(relevantMessages);
+    return relevantMessages;
   }
 }

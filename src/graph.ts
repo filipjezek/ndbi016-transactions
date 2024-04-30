@@ -62,7 +62,7 @@ export class Graph {
   }
 
   public replaceNode(oldNode: number, newNode: number) {
-    const neighbors = this.adjacencyList.get(oldNode);
+    const neighbors = this.adjacencyList.get(oldNode) || new Set();
     this.adjacencyList.delete(oldNode);
     this.adjacencyList.set(newNode, neighbors);
     for (const otherNeighbors of this.adjacencyList.values()) {
@@ -70,5 +70,9 @@ export class Graph {
         otherNeighbors.add(newNode);
       }
     }
+  }
+
+  public clear() {
+    this.adjacencyList.clear();
   }
 }
