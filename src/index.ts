@@ -5,6 +5,8 @@ import { SeededRNG, globalRNG } from "./utils/rng";
 import { ChartJSNodeCanvas } from "chartjs-node-canvas";
 import fs from "node:fs/promises";
 import { avg } from "./utils/avg";
+import { DBLog } from "./db-log";
+import { samples } from "./schedule-samples";
 
 async function runConcurrently(
   appCount: number,
@@ -49,6 +51,14 @@ function printInfo(tm: TransactionManager) {
       (tm.deadlockedTimes / blockableCount) * 100
     }%`
   );
+}
+
+function computeScheduleProperties(schedule: string) {
+  const logs = DBLog.importForAnalysis(schedule, " ");
+  logs.forEach((log, i) => {
+    console.log(`=============Log ${i + 1}=============`);
+    log.printProperties();
+  });
 }
 
 async function drawGraph(
@@ -116,5 +126,6 @@ async function prepareGraphData() {
   };
 }
 
-const tm = await runConcurrently(2, 20, undefined, 5);
-printInfo(tm);
+// const tm = await runConcurrently(2, 20, undefined, 5);
+// printInfo(tm);
+computeScheduleProperties(samples);

@@ -64,6 +64,7 @@ export class ScheduleAnalysis {
             break;
           }
           if (
+            g[tgt].type === MessageType.Commit ||
             g[src].transactionId === g[tgt].transactionId ||
             (g[src].type === MessageType.Read &&
               g[tgt].type === MessageType.Read)

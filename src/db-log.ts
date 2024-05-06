@@ -173,25 +173,56 @@ export class DBLog {
     return [...this.regularMessages()]
       .map((msg) => {
         return [
-          msg.transactionId,
-          msg.type.toLowerCase(),
-          "address" in msg ? msg.address : "",
           historyId,
+          msg.transactionId,
+          msg.type,
+          "address" in msg ? msg.address : "",
         ].join(separator);
       })
       .join("\n");
   }
 
-  public import(data: string, separator = ",") {
-    this.log = data.split("\n").map((line) => {
-      const [transactionId, type, address, historyId] = line.split(separator);
-      return {
+  public static importForAnalysis(data: string, separator = ",") {
+    data = data.trim();
+    const logs: DBLog[] = [];
+    let current: DBLog;
+    let currHID: string;
+    data.split("\n").forEach((line) => {
+      const [historyId, transactionId, type, address] = line
+        .trim()
+        .split(separator);
+      if (historyId !== currHID) {
+        current = new DBLog();
+        logs.push(current);
+        currHID = historyId;
+      }
+      const msg = {
         transactionId: +transactionId,
-        type: type.toUpperCase() as MessageType,
-        address: address === "" ? undefined : +address,
-      } as Message;
+        type: type as MessageType,
+        address: address === "" || address === undefined ? undefined : +address,
+      };
+      if (msg.address === undefined) delete msg.address;
+      current.log.push(msg as Message);
     });
-    this.analysis = null;
+
+    logs.forEach((log) => {
+      const tids = new Set(
+        log.data
+          .filter((msg) => "transactionId" in msg)
+          .map((msg) => msg.transactionId)
+      );
+      log.tids = tids;
+      log.log.splice(
+        2,
+        0,
+        ...(Array.from(tids).map((tid) => ({
+          type: MessageType.Start,
+          transactionId: tid,
+        })) as Message[])
+      );
+    });
+
+    return logs;
   }
 
   public getBlockableMessageCount() {
