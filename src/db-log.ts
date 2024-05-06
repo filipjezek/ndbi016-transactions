@@ -247,8 +247,6 @@ export class DBLog {
     relevantMessages = relevantMessages.filter((m) =>
       startedTids.has(m.transactionId)
     );
-    console.log("Relevant messages:");
-    console.log(relevantMessages);
     return relevantMessages;
   }
 }

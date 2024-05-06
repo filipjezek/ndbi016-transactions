@@ -17,6 +17,7 @@ export class TransactionManager {
     return this._data as readonly number[];
   }
   public readonly log = new DBLog();
+  private _triedOutNestedRestart = false;
   public blockedTimes = 0;
   public deadlockedTimes = 0;
   private locks: CellLock[];
@@ -50,7 +51,7 @@ export class TransactionManager {
    */
   private handleMessage(msg: Message): boolean {
     if (!msg) return;
-    if (this.log.data.length === 30) {
+    if (this.log.data.length === 32) {
       this.restart();
     }
     let completed = true;
@@ -190,6 +191,11 @@ export class TransactionManager {
     this.locks = this._data.map(() => new CellLock());
     const relevantLogs = this.log.prepareForRecovery();
     for (const log of relevantLogs) {
+      if (this.log.data.length === 36 && !this._triedOutNestedRestart) {
+        this._triedOutNestedRestart = true;
+        this.restart();
+        return;
+      }
       this.handleMessage(log);
     }
     this.dependencies.data.forEach((_, tid) => {
