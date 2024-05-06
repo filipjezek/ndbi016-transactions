@@ -37,6 +37,7 @@ async function runConcurrently(
 function printInfo(tm: TransactionManager) {
   tm.log.print();
   tm.log.printProperties();
+  console.log(`Data sum: ${tm.data.reduce((a, b) => a + b, 0)}`);
   const blockableCount = tm.log.getBlockableMessageCount();
   console.log(
     `Blocked times: ${tm.blockedTimes} / ${blockableCount} = ${

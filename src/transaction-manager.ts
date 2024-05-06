@@ -114,6 +114,7 @@ export class TransactionManager {
     msg.callback();
   }
   private handleAbort(msg: ControlMessage) {
+    const revChanges = this.log.getReverseChanges(msg.transactionId);
     this.log.append(msg);
 
     const rollbackTid = Connection.newTID();
@@ -130,17 +131,15 @@ export class TransactionManager {
       callback: () => {},
     });
     this.tranResources.set(rollbackTid, resources);
-    this.log
-      .getReverseChanges(msg.transactionId)
-      .forEach(({ address, data }) => {
-        this.handleWrite({
-          address,
-          data,
-          transactionId: rollbackTid,
-          type: MessageType.Write,
-          callback: () => {},
-        });
+    revChanges.forEach(({ address, data }) => {
+      this.handleWrite({
+        address,
+        data,
+        transactionId: rollbackTid,
+        type: MessageType.Write,
+        callback: () => {},
       });
+    });
     this.handleCommit({
       transactionId: rollbackTid,
       type: MessageType.Commit,
